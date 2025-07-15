@@ -5,6 +5,7 @@
  ***********************************************************************/
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "../include/secp256k1.h"
@@ -15,16 +16,24 @@ static void help(int default_iters) {
     printf("Benchmarks the following algorithms:\n");
     printf("    - ECDSA signing/verification\n");
 
-#ifdef ENABLE_MODULE_ECDH
-    printf("    - ECDH key exchange (optional module)\n");
-#endif
-
 #ifdef ENABLE_MODULE_RECOVERY
     printf("    - Public key recovery (optional module)\n");
 #endif
 
+#ifdef ENABLE_MODULE_ECDH
+    printf("    - ECDH key exchange (optional module)\n");
+#endif
+
 #ifdef ENABLE_MODULE_SCHNORRSIG
     printf("    - Schnorr signatures (optional module)\n");
+#endif
+
+#ifdef ENABLE_MODULE_ELLSWIFT
+    printf("    - ElligatorSwift (optional module)\n");
+#endif
+
+#ifdef ENABLE_MODULE_SILENTPAYMENTS
+    printf("    - Silent payments (optional module)\n");
 #endif
 
     printf("\n");
@@ -63,11 +72,15 @@ static void help(int default_iters) {
     printf("    ellswift_ecdh     : ECDH on ElligatorSwift keys\n");
 #endif
 
+#ifdef ENABLE_MODULE_SILENTPAYMENTS
+    printf("    silentpayments    : Silent payments recipient scanning\n");
+#endif
+
     printf("\n");
 }
 
 typedef struct {
-    rustsecp256k1_v0_11_context *ctx;
+    secp256k1_context *ctx;
     unsigned char msg[32];
     unsigned char key[32];
     unsigned char sig[72];
@@ -81,14 +94,14 @@ static void bench_verify(void* arg, int iters) {
     bench_data* data = (bench_data*)arg;
 
     for (i = 0; i < iters; i++) {
-        rustsecp256k1_v0_11_pubkey pubkey;
-        rustsecp256k1_v0_11_ecdsa_signature sig;
+        secp256k1_pubkey pubkey;
+        secp256k1_ecdsa_signature sig;
         data->sig[data->siglen - 1] ^= (i & 0xFF);
         data->sig[data->siglen - 2] ^= ((i >> 8) & 0xFF);
         data->sig[data->siglen - 3] ^= ((i >> 16) & 0xFF);
-        CHECK(rustsecp256k1_v0_11_ec_pubkey_parse(data->ctx, &pubkey, data->pubkey, data->pubkeylen) == 1);
-        CHECK(rustsecp256k1_v0_11_ecdsa_signature_parse_der(data->ctx, &sig, data->sig, data->siglen) == 1);
-        CHECK(rustsecp256k1_v0_11_ecdsa_verify(data->ctx, &sig, data->msg, &pubkey) == (i == 0));
+        CHECK(secp256k1_ec_pubkey_parse(data->ctx, &pubkey, data->pubkey, data->pubkeylen) == 1);
+        CHECK(secp256k1_ecdsa_signature_parse_der(data->ctx, &sig, data->sig, data->siglen) == 1);
+        CHECK(secp256k1_ecdsa_verify(data->ctx, &sig, data->msg, &pubkey) == (i == 0));
         data->sig[data->siglen - 1] ^= (i & 0xFF);
         data->sig[data->siglen - 2] ^= ((i >> 8) & 0xFF);
         data->sig[data->siglen - 3] ^= ((i >> 16) & 0xFF);
@@ -115,9 +128,9 @@ static void bench_sign_run(void* arg, int iters) {
     for (i = 0; i < iters; i++) {
         size_t siglen = 74;
         int j;
-        rustsecp256k1_v0_11_ecdsa_signature signature;
-        CHECK(rustsecp256k1_v0_11_ecdsa_sign(data->ctx, &signature, data->msg, data->key, NULL, NULL));
-        CHECK(rustsecp256k1_v0_11_ecdsa_signature_serialize_der(data->ctx, sig, &siglen, &signature));
+        secp256k1_ecdsa_signature signature;
+        CHECK(secp256k1_ecdsa_sign(data->ctx, &signature, data->msg, data->key, NULL, NULL));
+        CHECK(secp256k1_ecdsa_signature_serialize_der(data->ctx, sig, &siglen, &signature));
         for (j = 0; j < 32; j++) {
             data->msg[j] = sig[j];
             data->key[j] = sig[j + 32];
@@ -141,9 +154,9 @@ static void bench_keygen_run(void *arg, int iters) {
     for (i = 0; i < iters; i++) {
         unsigned char pub33[33];
         size_t len = 33;
-        rustsecp256k1_v0_11_pubkey pubkey;
-        CHECK(rustsecp256k1_v0_11_ec_pubkey_create(data->ctx, &pubkey, data->key));
-        CHECK(rustsecp256k1_v0_11_ec_pubkey_serialize(data->ctx, pub33, &len, &pubkey, SECP256K1_EC_COMPRESSED));
+        secp256k1_pubkey pubkey;
+        CHECK(secp256k1_ec_pubkey_create(data->ctx, &pubkey, data->key));
+        CHECK(secp256k1_ec_pubkey_serialize(data->ctx, pub33, &len, &pubkey, SECP256K1_EC_COMPRESSED));
         memcpy(data->key, pub33 + 1, 32);
     }
 }
@@ -165,10 +178,14 @@ static void bench_keygen_run(void *arg, int iters) {
 # include "modules/ellswift/bench_impl.h"
 #endif
 
+#ifdef ENABLE_MODULE_SILENTPAYMENTS
+# include "modules/silentpayments/bench_impl.h"
+#endif
+
 int main(int argc, char** argv) {
     int i;
-    rustsecp256k1_v0_11_pubkey pubkey;
-    rustsecp256k1_v0_11_ecdsa_signature sig;
+    secp256k1_pubkey pubkey;
+    secp256k1_ecdsa_signature sig;
     bench_data data;
 
     int d = argc == 1;
@@ -179,7 +196,7 @@ int main(int argc, char** argv) {
     char* valid_args[] = {"ecdsa", "verify", "ecdsa_verify", "sign", "ecdsa_sign", "ecdh", "recover",
                          "ecdsa_recover", "schnorrsig", "schnorrsig_verify", "schnorrsig_sign", "ec",
                          "keygen", "ec_keygen", "ellswift", "encode", "ellswift_encode", "decode",
-                         "ellswift_decode", "ellswift_keygen", "ellswift_ecdh"};
+                         "ellswift_decode", "ellswift_keygen", "ellswift_ecdh", "silentpayments"};
     size_t valid_args_size = sizeof(valid_args)/sizeof(valid_args[0]);
     int invalid_args = have_invalid_args(argc, argv, valid_args, valid_args_size);
 
@@ -188,11 +205,11 @@ int main(int argc, char** argv) {
            || have_flag(argc, argv, "--help")
            || have_flag(argc, argv, "help")) {
             help(default_iters);
-            return 0;
+            return EXIT_SUCCESS;
         } else if (invalid_args) {
             fprintf(stderr, "./bench: unrecognized argument.\n\n");
             help(default_iters);
-            return 1;
+            return EXIT_FAILURE;
         }
     }
 
@@ -201,7 +218,7 @@ int main(int argc, char** argv) {
     if (have_flag(argc, argv, "ecdh")) {
         fprintf(stderr, "./bench: ECDH module not enabled.\n");
         fprintf(stderr, "Use ./configure --enable-module-ecdh.\n\n");
-        return 1;
+        return EXIT_FAILURE;
     }
 #endif
 
@@ -209,7 +226,7 @@ int main(int argc, char** argv) {
     if (have_flag(argc, argv, "recover") || have_flag(argc, argv, "ecdsa_recover")) {
         fprintf(stderr, "./bench: Public key recovery module not enabled.\n");
         fprintf(stderr, "Use ./configure --enable-module-recovery.\n\n");
-        return 1;
+        return EXIT_FAILURE;
     }
 #endif
 
@@ -217,7 +234,7 @@ int main(int argc, char** argv) {
     if (have_flag(argc, argv, "schnorrsig") || have_flag(argc, argv, "schnorrsig_sign") || have_flag(argc, argv, "schnorrsig_verify")) {
         fprintf(stderr, "./bench: Schnorr signatures module not enabled.\n");
         fprintf(stderr, "Use ./configure --enable-module-schnorrsig.\n\n");
-        return 1;
+        return EXIT_FAILURE;
     }
 #endif
 
@@ -227,12 +244,20 @@ int main(int argc, char** argv) {
         have_flag(argc, argv, "ellswift_ecdh")) {
         fprintf(stderr, "./bench: ElligatorSwift module not enabled.\n");
         fprintf(stderr, "Use ./configure --enable-module-ellswift.\n\n");
+        return EXIT_FAILURE;
+    }
+#endif
+
+#ifndef ENABLE_MODULE_SILENTPAYMENTS
+    if (have_flag(argc, argv, "silentpayments")) {
+        fprintf(stderr, "./bench: silentpayments module not enabled.\n");
+        fprintf(stderr, "Use ./configure --enable-module-silentpayments.\n\n");
         return 1;
     }
 #endif
 
     /* ECDSA benchmark */
-    data.ctx = rustsecp256k1_v0_11_context_create(SECP256K1_CONTEXT_NONE);
+    data.ctx = secp256k1_context_create(SECP256K1_CONTEXT_NONE);
 
     for (i = 0; i < 32; i++) {
         data.msg[i] = 1 + i;
@@ -241,11 +266,11 @@ int main(int argc, char** argv) {
         data.key[i] = 33 + i;
     }
     data.siglen = 72;
-    CHECK(rustsecp256k1_v0_11_ecdsa_sign(data.ctx, &sig, data.msg, data.key, NULL, NULL));
-    CHECK(rustsecp256k1_v0_11_ecdsa_signature_serialize_der(data.ctx, data.sig, &data.siglen, &sig));
-    CHECK(rustsecp256k1_v0_11_ec_pubkey_create(data.ctx, &pubkey, data.key));
+    CHECK(secp256k1_ecdsa_sign(data.ctx, &sig, data.msg, data.key, NULL, NULL));
+    CHECK(secp256k1_ecdsa_signature_serialize_der(data.ctx, data.sig, &data.siglen, &sig));
+    CHECK(secp256k1_ec_pubkey_create(data.ctx, &pubkey, data.key));
     data.pubkeylen = 33;
-    CHECK(rustsecp256k1_v0_11_ec_pubkey_serialize(data.ctx, data.pubkey, &data.pubkeylen, &pubkey, SECP256K1_EC_COMPRESSED) == 1);
+    CHECK(secp256k1_ec_pubkey_serialize(data.ctx, data.pubkey, &data.pubkeylen, &pubkey, SECP256K1_EC_COMPRESSED) == 1);
 
     print_output_table_header_row();
     if (d || have_flag(argc, argv, "ecdsa") || have_flag(argc, argv, "verify") || have_flag(argc, argv, "ecdsa_verify")) run_benchmark("ecdsa_verify", bench_verify, NULL, NULL, &data, 10, iters);
@@ -253,7 +278,7 @@ int main(int argc, char** argv) {
     if (d || have_flag(argc, argv, "ecdsa") || have_flag(argc, argv, "sign") || have_flag(argc, argv, "ecdsa_sign")) run_benchmark("ecdsa_sign", bench_sign_run, bench_sign_setup, NULL, &data, 10, iters);
     if (d || have_flag(argc, argv, "ec") || have_flag(argc, argv, "keygen") || have_flag(argc, argv, "ec_keygen")) run_benchmark("ec_keygen", bench_keygen_run, bench_keygen_setup, NULL, &data, 10, iters);
 
-    rustsecp256k1_v0_11_context_destroy(data.ctx);
+    secp256k1_context_destroy(data.ctx);
 
 #ifdef ENABLE_MODULE_ECDH
     /* ECDH benchmarks */
@@ -275,5 +300,11 @@ int main(int argc, char** argv) {
     run_ellswift_bench(iters, argc, argv);
 #endif
 
-    return 0;
+#ifdef ENABLE_MODULE_SILENTPAYMENTS
+    /* SilentPayments benchmarks */
+    run_silentpayments_bench(iters, argc, argv);
+#endif
+
+
+    return EXIT_SUCCESS;
 }

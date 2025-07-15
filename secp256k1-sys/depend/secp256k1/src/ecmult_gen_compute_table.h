@@ -9,6 +9,6 @@
 
 #include "ecmult_gen.h"
 
-static void rustsecp256k1_v0_11_ecmult_gen_compute_table(rustsecp256k1_v0_11_ge_storage* table, const rustsecp256k1_v0_11_ge* gen, int blocks, int teeth, int spacing);
+static void secp256k1_ecmult_gen_compute_table(secp256k1_ge_storage* table, const secp256k1_ge* gen, int blocks, int teeth, int spacing);
 
 #endif /* SECP256K1_ECMULT_GEN_COMPUTE_TABLE_H */

@@ -13,10 +13,10 @@
 /**
  * Multiply: R = q*A (in constant-time for q)
  */
-static void rustsecp256k1_v0_11_ecmult_const(rustsecp256k1_v0_11_gej *r, const rustsecp256k1_v0_11_ge *a, const rustsecp256k1_v0_11_scalar *q);
+static void secp256k1_ecmult_const(secp256k1_gej *r, const secp256k1_ge *a, const secp256k1_scalar *q);
 
 /**
- * Same as rustsecp256k1_v0_11_ecmult_const, but takes in an x coordinate of the base point
+ * Same as secp256k1_ecmult_const, but takes in an x coordinate of the base point
  * only, specified as fraction n/d (numerator/denominator). Only the x coordinate of the result is
  * returned.
  *
@@ -27,11 +27,11 @@ static void rustsecp256k1_v0_11_ecmult_const(rustsecp256k1_v0_11_gej *r, const r
  *
  * Constant time in the value of q, but not any other inputs.
  */
-static int rustsecp256k1_v0_11_ecmult_const_xonly(
-    rustsecp256k1_v0_11_fe *r,
-    const rustsecp256k1_v0_11_fe *n,
-    const rustsecp256k1_v0_11_fe *d,
-    const rustsecp256k1_v0_11_scalar *q,
+static int secp256k1_ecmult_const_xonly(
+    secp256k1_fe *r,
+    const secp256k1_fe *n,
+    const secp256k1_fe *d,
+    const secp256k1_scalar *q,
     int known_on_curve
 );
 

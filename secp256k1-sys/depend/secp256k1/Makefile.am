@@ -6,7 +6,7 @@ AM_CFLAGS = $(SECP_CFLAGS)
 
 lib_LTLIBRARIES = libsecp256k1.la
 include_HEADERS = include/secp256k1.h
-include_HEADERS += include/rustsecp256k1_v0_11_preallocated.h
+include_HEADERS += include/secp256k1_preallocated.h
 noinst_HEADERS =
 noinst_HEADERS += src/scalar.h
 noinst_HEADERS += src/scalar_4x64.h
@@ -47,6 +47,7 @@ noinst_HEADERS += src/assumptions.h
 noinst_HEADERS += src/checkmem.h
 noinst_HEADERS += src/testutil.h
 noinst_HEADERS += src/util.h
+noinst_HEADERS += src/util_local_visibility.h
 noinst_HEADERS += src/int128.h
 noinst_HEADERS += src/int128_impl.h
 noinst_HEADERS += src/int128_native.h
@@ -63,7 +64,7 @@ noinst_HEADERS += src/hash_impl.h
 noinst_HEADERS += src/field.h
 noinst_HEADERS += src/field_impl.h
 noinst_HEADERS += src/bench.h
-noinst_HEADERS += src/wycheproof/ecdsa_rustsecp256k1_v0_11_sha256_bitcoin_test.h
+noinst_HEADERS += src/wycheproof/ecdsa_secp256k1_sha256_bitcoin_test.h
 noinst_HEADERS += src/hsort.h
 noinst_HEADERS += src/hsort_impl.h
 noinst_HEADERS += contrib/lax_der_parsing.h
@@ -72,15 +73,15 @@ noinst_HEADERS += contrib/lax_der_privatekey_parsing.h
 noinst_HEADERS += contrib/lax_der_privatekey_parsing.c
 noinst_HEADERS += examples/examples_util.h
 
-PRECOMPUTED_LIB = librustsecp256k1_v0_11_precomputed.la
+PRECOMPUTED_LIB = libsecp256k1_precomputed.la
 noinst_LTLIBRARIES = $(PRECOMPUTED_LIB)
-librustsecp256k1_v0_11_precomputed_la_SOURCES =  src/precomputed_ecmult.c src/precomputed_ecmult_gen.c
-# We need `-I$(top_srcdir)/src` in VPATH builds if librustsecp256k1_v0_11_precomputed_la_SOURCES have been recreated in the build tree.
+libsecp256k1_precomputed_la_SOURCES =  src/precomputed_ecmult.c src/precomputed_ecmult_gen.c
+# We need `-I$(top_srcdir)/src` in VPATH builds if libsecp256k1_precomputed_la_SOURCES have been recreated in the build tree.
 # This helps users and packagers who insist on recreating the precomputed files (e.g., Gentoo).
-librustsecp256k1_v0_11_precomputed_la_CPPFLAGS = -I$(top_srcdir)/src $(SECP_CONFIG_DEFINES)
+libsecp256k1_precomputed_la_CPPFLAGS = -I$(top_srcdir)/src $(SECP_CONFIG_DEFINES)
 
 if USE_EXTERNAL_ASM
-COMMON_LIB = librustsecp256k1_v0_11_common.la
+COMMON_LIB = libsecp256k1_common.la
 else
 COMMON_LIB =
 endif
@@ -91,14 +92,14 @@ pkgconfig_DATA = libsecp256k1.pc
 
 if USE_EXTERNAL_ASM
 if USE_ASM_ARM
-librustsecp256k1_v0_11_common_la_SOURCES = src/asm/field_10x26_arm.s
+libsecp256k1_common_la_SOURCES = src/asm/field_10x26_arm.s
 endif
 endif
 
-librustsecp256k1_v0_11_la_SOURCES = src/secp256k1.c
-librustsecp256k1_v0_11_la_CPPFLAGS = $(SECP_CONFIG_DEFINES)
-librustsecp256k1_v0_11_la_LIBADD = $(COMMON_LIB) $(PRECOMPUTED_LIB)
-librustsecp256k1_v0_11_la_LDFLAGS = -no-undefined -version-info $(LIB_VERSION_CURRENT):$(LIB_VERSION_REVISION):$(LIB_VERSION_AGE)
+libsecp256k1_la_SOURCES = src/secp256k1.c
+libsecp256k1_la_CPPFLAGS = $(SECP_CONFIG_DEFINES)
+libsecp256k1_la_LIBADD = $(COMMON_LIB) $(PRECOMPUTED_LIB)
+libsecp256k1_la_LDFLAGS = -no-undefined -version-info $(LIB_VERSION_CURRENT):$(LIB_VERSION_REVISION):$(LIB_VERSION_AGE)
 
 noinst_PROGRAMS =
 if USE_BENCHMARK
@@ -206,6 +207,17 @@ musig_example_LDFLAGS += -lbcrypt
 endif
 TESTS += musig_example
 endif
+if ENABLE_MODULE_SILENTPAYMENTS
+noinst_PROGRAMS += silentpayments_example
+silentpayments_example_SOURCES = examples/silentpayments.c
+silentpayments_example_CPPFLAGS = -I$(top_srcdir)/include -DSECP256K1_STATIC
+silentpayments_example_LDADD = libsecp256k1.la
+silentpayments_example_LDFLAGS = -static
+if BUILD_WINDOWS
+silentpayments_example_LDFLAGS += -lbcrypt
+endif
+TESTS += silentpayments_example
+endif
 endif
 
 ### Precomputed tables
@@ -247,11 +259,24 @@ maintainer-clean-local: clean-precomp
 
 ### Pregenerated test vectors
 ### (see the comments in the previous section for detailed rationale)
-TESTVECTORS = src/wycheproof/ecdsa_rustsecp256k1_v0_11_sha256_bitcoin_test.h
+TESTVECTORS = src/wycheproof/ecdsa_secp256k1_sha256_bitcoin_test.h
+TESTVECTORS += src/modules/silentpayments/vectors.h
 
-src/wycheproof/ecdsa_rustsecp256k1_v0_11_sha256_bitcoin_test.h:
+if ENABLE_MODULE_ECDH
+TESTVECTORS += src/wycheproof/ecdh_secp256k1_test.h
+endif
+
+src/wycheproof/ecdsa_secp256k1_sha256_bitcoin_test.h:
 	mkdir -p $(@D)
-	python3 $(top_srcdir)/tools/tests_wycheproof_generate.py $(top_srcdir)/src/wycheproof/ecdsa_rustsecp256k1_v0_11_sha256_bitcoin_test.json > $@
+	python3 $(top_srcdir)/tools/tests_wycheproof_generate_ecdsa.py $(top_srcdir)/src/wycheproof/ecdsa_secp256k1_sha256_bitcoin_test.json > $@
+
+src/wycheproof/ecdh_secp256k1_test.h:
+	mkdir -p $(@D)
+	python3 $(top_srcdir)/tools/tests_wycheproof_generate_ecdh.py $(top_srcdir)/src/wycheproof/ecdh_secp256k1_test.json > $@
+
+src/modules/silentpayments/vectors.h:
+	mkdir -p $(@D)
+	python3 $(top_srcdir)/tools/tests_silentpayments_generate.py $(top_srcdir)/src/modules/silentpayments/bip352_send_and_receive_test_vectors.json > $@
 
 testvectors: $(TESTVECTORS)
 
@@ -271,11 +296,13 @@ EXTRA_DIST += sage/gen_exhaustive_groups.sage
 EXTRA_DIST += sage/gen_split_lambda_constants.sage
 EXTRA_DIST += sage/group_prover.sage
 EXTRA_DIST += sage/prove_group_implementations.sage
-EXTRA_DIST += sage/rustsecp256k1_v0_11_params.sage
+EXTRA_DIST += sage/secp256k1_params.sage
 EXTRA_DIST += sage/weierstrass_prover.sage
 EXTRA_DIST += src/wycheproof/WYCHEPROOF_COPYING
-EXTRA_DIST += src/wycheproof/ecdsa_rustsecp256k1_v0_11_sha256_bitcoin_test.json
-EXTRA_DIST += tools/tests_wycheproof_generate.py
+EXTRA_DIST += src/wycheproof/ecdsa_secp256k1_sha256_bitcoin_test.json
+EXTRA_DIST += src/wycheproof/ecdh_secp256k1_test.json
+EXTRA_DIST += tools/tests_wycheproof_generate_ecdsa.py
+EXTRA_DIST += tools/tests_wycheproof_generate_ecdh.py
 
 if ENABLE_MODULE_ECDH
 include src/modules/ecdh/Makefile.am.include
@@ -299,4 +326,8 @@ endif
 
 if ENABLE_MODULE_ELLSWIFT
 include src/modules/ellswift/Makefile.am.include
+endif
+
+if ENABLE_MODULE_SILENTPAYMENTS
+include src/modules/silentpayments/Makefile.am.include
 endif
